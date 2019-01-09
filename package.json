@@ -1,0 +1,17 @@
+{
+  "name": "linebuffer",
+  "version": "1.0.0",
+  "main": "Main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mongodb": "^3.1.10",
+    "request": "^2.88.0"
+  },
+  "devDependencies": {},
+  "description": ""
+}
