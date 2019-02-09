@@ -9,32 +9,47 @@ var bufferBuilder = require('./bufferBuilder');
 
 const ip = '127.0.0.1';
 const portNum = 27017;
-//const dbName = 'policedb5';
 const dbName = 'roadDB';
 const url = 'mongodb://localhost:27017';
 var conn;
 var documents;
 
+
+/*  - 1. Connect to DB 
+    - 2. Fetch line data from MongoDB
+    - 3. Get the geometry(in WGS84 lat/long coordinates) object from the geojosn line or multiline
+    - 4. Convert geom coordinates to lat/long to UTM coordinates
+    - 5. Build buffer around the line
+    */
 mongoClient.connect(url)
-  .then(conn => {
-    console.log("inside 1");
+  .then(
+    // ---- STEP 1.
+    conn => {
+
+      // ---- STEP 2.
     return conn.db('roadDB').collection('road').find({
       "properties.Name": "Beach Road"
       }).toArray() 
     .then(docs => {
-      console.log("inside 2");
-      myLog(docs);
+
+      //myLog(docs);
       var geom = getGeomFromDoc(docs);
+
+      // ---- STEP 3.
       if (geom !== false) {
-        //console.log(geom);
-        geom = utm.getCartesianFromGeodetic(geom);
+        //console.log("Mongdb GEOM in lat/long: ------- \n", geom);
+
+        // ---- STEP 4.
+        let geomUTM = utm.getCartesianFromGeodetic(geom);
+        console.log("GEOM in UTM coordinates : ------- \n", geomUTM);
       }
 
-      bufferBuilder.getLineBuffer(geom);
+      // ---- STEP 5.
+      //bufferBuilder.getLineBuffer(geom);
 
     })
     .then(() => {
-      console.log("inside 3");
+
       conn.close();
     })
     .catch(err => {

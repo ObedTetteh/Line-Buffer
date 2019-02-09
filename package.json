@@ -9,8 +9,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@turf/turf": "^4.7.3",
+    "geojson-dissolve": "^3.1.0",
+    "mathjs": "^5.4.2",
     "mongodb": "^3.1.10",
-    "request": "^2.88.0"
+    "request": "^2.88.0",
+    "systeminformation": "^4.0.9",
+    "turf": "^3.0.14"
   },
   "devDependencies": {},
   "description": ""

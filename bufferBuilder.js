@@ -7,10 +7,12 @@
  *                  2. Buffer distance in meters. e.g. const d = 5;
  * Output Paramters: ... 
  */
-
+var bufferUtils = require('./bufferUtils');
+ var math = require('mathjs');
 var BD = 50;                /** buffer distance in meters */
 const  DEG2RAD = 0.01745329;
 const  RAD2DEG = 57.29577951; 
+var direction = 0;
 
  /** Top and bottom lines as arrays to which other transformed points will be added  */
 //var topLineGeom = [];       
@@ -24,48 +26,34 @@ function run(geom){
   BD = 50;
   filterNextNode(geom).forEach(line => {
     /** Top and bottom lines as arrays to which other transformed points will be added  */
-    var topLineGeom = [];       
-    var bottomLineGeom = [];  
+    var leftLineGeom = [];       
+    var rightLineGeom = [];  
 
     for (var i = 0; i < line.length-1; i++) {
       let node1 = line[i], 
           node2 = line[i + 1];
-      let currentlineSegment = [node1, node2];
+      let currentLineSegment = [node1, node2];
       let previousLineSegment;
       if (i > 0) {
-        previousLineSegment = [ line[i -1], line[i] ];
+        previousLineSegment = [ line[i - 1], line[i] ];
       }
-/*       if (line[i][0] < line[i+1][0]){  // node with X value closer to zero if left node
-        leftNode = line[i];
-        rightNode = line[i + 1];
-      } else if(line[i][0] > line[i+1][0]){
-        leftNode = line[i + 1];
-        rightNode = line[i];
-      } */
 
-      let HVstatus = isVertOrHorz(node1, node2);
+      let orienationStatus = isVertOrHorz(node1, node2);
       /* Process each line */
-      switch (HVstatus) {
-        case 0: 
-          /* let BGBLines = getBGB(leftNode, rightNode);
-          topLineGeom = appendLine(topLineGeom, BGBLines[0]);
-          bottomLineGeom = appendLine(bottomLineGeom, BGBLines[1]); */
-
-          let BGBLines = getBGBPerpendicular(node1, node2);
-          //getAngleBetweenLines([leftNode]);
-          //console.log("P: " + BGBLines[0]);
-          //console.log("--------------");
-          //topLineGeom = appendLine(topLineGeom, BGBLines[0]);
+      switch (orienationStatus) {
+        case +0: 
+          let bgb = getBGBPerp(node1, node2);
           
           if (i > 0) {
-            let angle = getAngleBetweenlines(previousLineSegment, currentlineSegment);
-            appendLine(topLineGeom, BGBLines[0], angle);
+            let angle = getAngleBetweenlines(previousLineSegment, currentLineSegment);
+            //appendLine(leftLineGeom, rightLineGeom,  BGBLines, angle);
           }
           
           //console.log("B: " + topLineGeom);
           //console.log("------------------");
           //bottomLineGeom = appendLine(bottomLineGeom, BGBLines[1]);
           break;
+
         case 1:
           //getHorizontalBGB(leftNode, rightNode);
           break;
@@ -88,12 +76,12 @@ function run(geom){
     let rightSemicircle = getSemiCircleVertices(line[line.length-1], BD, "r");
     let leftSemicircle = getSemiCircleVertices(line[0], BD, "l");
     
-    topLineGeom.push(rightSemicircle);
-    bottomLineGeom = bottomLineGeom.reverse();
-    topLineGeom.push(bottomLineGeom);
+    leftLineGeom.push(rightSemicircle); 
+    rightLineGeom = rightLineGeom.reverse();
+    leftLineGeom.push(rightLineGeom);
     leftSemicircle = leftSemicircle.reverse();
-    topLineGeom.push(leftSemicircle);
-    topLineGeom.push(topLineGeom[0]);
+    leftLineGeom.push(leftSemicircle);
+    leftLineGeom.push(leftLineGeom[0]);
     ///////check and arrange buffer polygon content and "[[]]"s
     console.log("Buffer polygon");
     //console.log(topLineGeom);
@@ -110,20 +98,20 @@ function run(geom){
  * Note: node with X value closer to origin is considered left node during computation
  * @param LNode (array [Number, Number]): Left node of line (node closer to origin on the X axis)
  * @param RNode (array [Number, Number]: Right node of line (node farther from origin on the X axis)
- * @returns Array: An array of two lines in the following form;[[line1], [line2]]
+ * @returns Array: An array of two lines in the following form;[ [line1], [line2] ]
  *                 Each line consists of only 2 points:[line] = [ [start node Easting, start node Northing], 
  *                                                                [start node Easting, start node Northing] ]
  */
-function getBGBPerpendicular(LNode, RNode) {
-  let LX = LNode[0];            //LX is for easting value or x value of the left node
-  let LY= LNode[1];             //LY us for northing value or y value of the left node
-  let RX = RNode[0];            //RX is for easting value or x value of the right node
-  let RY = RNode[1];            //RN us for northing value or y value of the right node
-  let angle = getRotationAngle(LX, LY, RX, RY);
+function getBGBPerpendicular(node1, node2) {   //node1 then node2 in the direction of the growth of the line
+  let x1 = node1[0];            //LX is for easting value or x value of the left node
+  let y1= node1[1];             //LY us for northing value or y value of the left node
+  let x2 = node2[0];            //RX is for easting value or x value of the right node
+  let y2 = node2[1];            //RN us for northing value or y value of the right node
+  let angle = getRotationAngle(x1, y1, x2, y2);
   //console.log("O: " + LNode + " | " + RNode + " | " +  angle);
 
-  let dx = RX - LX;
-  let dy = RY - LY;
+  let dx = x2 - x1;
+  let dy = y2 - y1;
   let S = Math.sqrt((dx * dx) + (dy * dy));       //length of the line
   let odx = dx / S;
   let ady = dy / S;
@@ -133,28 +121,28 @@ function getBGBPerpendicular(LNode, RNode) {
   let topLine = [], bottomLine = [];
 
   if (angle < 0) {
-    LtopX = LX - ady * BD;
-    LtopY = LY + odx * BD;
-    LbottomX = LX + ady * BD;
-    LbottomY = LY - odx * BD;
+    LtopX = x1 - ady * BD;
+    LtopY = y1 + odx * BD;
+    LbottomX = x1 + ady * BD;
+    LbottomY = y1 - odx * BD;
 
-    RtopX = RX - ady * BD;
-    RtopY = RY + odx * BD;
-    RbottomX = RX + ady * BD;
-    RbottomY = RY - odx * BD;
+    RtopX = x2 - ady * BD;
+    RtopY = y2 + odx * BD;
+    RbottomX = x2 + ady * BD;
+    RbottomY = y2 - odx * BD;
     topLine = [[LtopX, LtopY],  [RtopX, RtopY]]; 
     bottomLine = [[LbottomX, LbottomY], [RbottomX, RbottomY]];
     //console.log("*: " + topLine);
   } else {
-    LtopX = LX + ady * BD;
-    LtopY = LY + odx * BD;
-    LbottomX = LX - ady * BD;
-    LbottomY = LY - odx * BD;
+    LtopX = x1 + ady * BD;
+    LtopY = y1 + odx * BD;
+    LbottomX = x2 - ady * BD;
+    LbottomY = y2 - odx * BD;
 
-    RtopX = RX + ady * BD;
-    RtopY = RY + odx * BD;
-    RbottomX = RX - ady * BD;
-    RbottomY = RY - odx * BD;
+    RtopX = x2 + ady * BD;
+    RtopY = y2 + odx * BD;
+    RbottomX = x2 - ady * BD;
+    RbottomY = y2 - odx * BD;
     topLine = [[LtopX, LtopY],  [RtopX, RtopY]]; 
     bottomLine = [[LbottomX, LbottomY], [RbottomX, RbottomY]];;
     //console.log("*: " + topLine);
@@ -166,103 +154,292 @@ function getBGBPerpendicular(LNode, RNode) {
 }
 
 
+function getBGBPerp(startNode, endNode) {   //node1 then node2 in the direction of the growth of the line
+  let startX = startNode[0];            //LX is for easting value or x value of the left node
+  let startY = startNode[1];             //LY us for northing value or y value of the left node
+  let endX = endNode[0];            //RX is for easting value or x value of the right node
+  let endY = endNode[1];            //RN us for northing value or y value of the right node
 
+  if (endX < startX) {    //if line direction or movement is toward origin on the x axis
+    let tempEndX = endX, tempEndy = endY;
+    endX = startX;
+    endY = startY;
+    startX = tempEndX;
+    startY = tempEndy;
+  }
+  let angle = getRotationAngle(startX, startY, endX, endY);
+  //console.log("O: " + LNode + " | " + RNode + " | " +  angle);
+
+  let dx = endX - startX;
+  let dy = endY - startY;
+  let S = Math.sqrt((dx * dx) + (dy * dy));       //length of the line
+  let odx = dx / S;
+  let ady = dy / S;
+
+  let leftLine, rightLine;
+
+  let LtopX, LtopY, LbottomX, LbottomY;
+  let RtopX, RtopY, RbottomX, RbottomY;
+  let topLine = [], bottomLine = [];
+
+  if (angle < 0) {
+    LtopX = startX - ady * BD;
+    LtopY = startY + odx * BD;
+    LbottomX = startX + ady * BD;
+    LbottomY = startY - odx * BD;
+
+    RtopX = endX - ady * BD;
+    RtopY = endY + odx * BD;
+    RbottomX = endX + ady * BD;
+    RbottomY = endY - odx * BD;
+    topLine = [[LtopX, LtopY],  [RtopX, RtopY]]; 
+    bottomLine = [[LbottomX, LbottomY], [RbottomX, RbottomY]];
+    //console.log("*: " + topLine);
+  } else {
+    LtopX = startX + ady * BD;
+    LtopY = startY + odx * BD;
+    LbottomX = startX - ady * BD;
+    LbottomY = startY - odx * BD;
+
+    RtopX = endX + ady * BD;
+    RtopY = endY + odx * BD;
+    RbottomX = endX - ady * BD;
+    RbottomY = endY - odx * BD;
+    
+    //console.log("*: " + topLine);
+    //console.log("-----------------------------------");
+  }
+  topLine = [[LtopX, LtopY],  [RtopX, RtopY]]; 
+  bottomLine = [[LbottomX, LbottomY], [RbottomX, RbottomY]];
+
+  if (endX < startX) {
+    leftLine = bottomLine;
+    rightLine = topLine;
+  } else {
+    leftLine = topLine;
+    rightLine = bottomLine;
+  }
+
+  let bgbMerged = getBGBMergedWithArcs(startNode, endNode, leftLine, rightLine);
+
+  //console.log("Topline: " + topLine);
+  //console.log("Bottomline: " + bottomLine);
+  return bgbMerged;
+}
+
+
+function getBGBMergedWithArcs(mainLineNode1, mainLineNode2, leftBGBLine, rightBGBLine){
+  let leftArc, rightArc;
+  let leftOriginNode, rightOriginNode;
+  let leftEndRotationPoint, rightEndRotationPoint;
+  let mergedBGBarcsnLines;
+  let leftBGBLeftNode, leftBGBRightNode;
+  let rightBGBLeftNode, rightBGBRightNode;
+
+  let drxn = "lr";
+  if (mainLineNode1[0] < mainLineNode2[0]) {
+    leftOriginNode = mainLineNode1;
+    rightOriginNode = mainLineNode2;
+    rightEndRotationPoint = rightBGBLine[1];
+    leftEndRotationPoint = leftBGBLine[0];
+  } else {
+    leftOriginNode = mainLineNode2;
+    rightOriginNode = mainLineNode1;
+    rightEndRotationPoint = rightBGBLine[0];
+    leftEndRotationPoint = leftBGBLine[1];
+    drxn = "rl";
+  }
+
+  leftArc = bufferUtils.getSemiCircleVertices(leftOriginNode, leftEndRotationPoint);
+  rightArc = bufferUtils.getSemiCircleVertices(rightOriginNode, rightEndRotationPoint);
+  mergedBGBarcsnLines = combineArcsnBGB(leftArc, rightArc, leftBGBLine, rightBGBLine, drxn);
+
+  return mergedBGBarcsnLines;
+
+
+/*   let leftBGBLineNode1X = leftBGBLine[0][0];
+  let leftBGBLineNode2X = leftBGBLine[1][0];
+
+  let rightBGBLineNode1X = rightBGBLine[0][0];
+  let rightBGBLineNode2X = rightBGBLine[1][0];
+
+  if (leftBGBLineNode1X < leftBGBLineNode2X) {
+    leftBGBLeftNode = leftBGBLineNode1X;
+    leftBGBRightnode = leftBGBLineNode2X;
+  } else {
+    leftBGBLeftNode = leftBGBLineNode2X;
+    leftBGBRightNode = leftBGBLineNode1X;
+  }
+
+  if (rightBGBLineNode1X < rightBGBLineNode2X ) {
+    rightBGBLeftNode = rightBGBLineNode1X;
+    rightBGBRightNode = rightBGBLineNode2X;
+  } else {
+    rightBGBLeftNode = rightBGBLineNode2X;
+    rightBGBRightNode = rightBGBLineNode1X;
+  } */
+
+}
+
+function combineArcsnBGB(leftArc, rightArc, leftBGBLine, rightBGBLine, drxn){
+  let bgb = [];
+  if (drxn === "lr") {
+
+    bgb = insert(bgb, leftBGBLine);
+    bgb = insert(bgb, rightArc);
+    bgb = insert(bgb, rightBGBLine);
+    bgb = insert(bgb, leftArc);
+    bgb.push(leftBGBLine[0]);     //1st and last coordinate of a polygon must be same
+
+    //bgb.push(leftBGBLine, rightArc, rightBGBLine, leftArc);
+    console.log("Final bgb: ", bgb);
+    console.log("------------------------------------");
+  } else {
+    bgb = insert(bgb, leftBGBLine);
+    bgb = insert(bgb, leftArc);
+    bgb = insert(bgb, rightBGBLine);
+    bgb = insert(bgb, rightArc);
+    bgb.push(leftBGBLine[0]);
+  }
+  return bgb;
+}
 
 /**
- * Append lineSegment the end of mainLine. LineSegment could be a straight line or an arc.
+ * Insert array2 into array1
+ * @param {*} array1 
+ * @param {*} array2 
+ */
+function insert(array1, array2){
+  
+  //TODO: if array1 and array2 are not of the Array type, abort process and return null
+  for (let i = 0; i < array2.length; i++) {    
+    array1.push(array2[i]);
+  }
+  return array1;
+}
+
+/**
+ * Append lineSegment to the end of mainLine. LineSegment could be a straight line or an arc.
  * @param {[Number Array]} mainLine: A Line array made up of arrays of coordinates pairs[X,Y]
  *  For example MainLine = [[ 823819.4561862915, 620424.4429363784 ], [ 824226.9451537293, 621308.3183418909] ]
  * @param {[Number Array]} lineSegment: A line or arc array made up of coordinate pairs in this format
  *            [[X,Y], [X,Y]]
  */
-function appendLine(mainLine, lineSegment, angle){
+function appendLine(leftLineGeom, rightLineGeom, BGB, angle){
 /*   console.log("A: " + lineSegment[0]);
   console.log("A: " + lineSegment[1]);
   console.log("A: " + lineSegment); */
 
   //console.log("App Main: " + mainLine);
-  let lastLineStored = [];
-  
-  if (mainLine.length === 0) {
-    console.log("Topline: " + mainLine);
-    mainLine.push(lineSegment);
-    //mainLine.push(lineSegment[1]);
-    console.log("1: " + mainLine);
-    
-    //console.log("1st point found");
-  } else if ( deepCompare(mainLine[mainLine.length - 1], lineSegment[0]) ){   //if last node stored is same as the left node of current line
+  //let lastLineStored = [];
+  let lastStoredLeftLineSegment = [];
+  let lastStoredRightLineSegment = [];
+  let leftBGBSegment = BGB[0];
+  let rightBGBSegment = BGB[1];
+
+  if (leftLineGeom.length === 0 || rightLineGeom.length === 0 ) {
+    //console.log("leftline: " + leftLineGeom);
+    //console.log("rightline: " + rightLineGeom);
+    console.log("leftBGBSegment:" , leftBGBSegment );
+    leftLineGeom.push(leftBGBSegment[0]); leftLineGeom.push(leftBGBSegment[1]); 
+    rightLineGeom.push(rightBGBSegment[0]); rightLineGeom.push(rightBGBSegment[1]);
+    console.log("1stL: ", leftLineGeom);
+    console.log("1stR: ", rightLineGeom);
+  } else if ( deepCompare(leftLineGeom[leftLineGeom.length - 1], leftBGBSegment[0]) ){   
+    //if last node stored is same as the left node of current line
     //store only last point
     console.log("is same: insert only last node of new line, no removal");
-    mainLine.push(lineSegment[1]);
+    leftLineGeom.push(leftBGBSegment[0]); leftLineGeom.push(leftBGBSegment[1]); 
+    rightLineGeom.push(rightBGBSegment[0]); rightLineGeom.push(rightBGBSegment[1]);
   } else{
-    lastLineStored.push(mainLine[mainLine.length - 2]);
-    lastLineStored.shift();
-    lastLineStored.push(mainLine[mainLine.length - 1]);
-    //lastIneStored =  [mainLine[mainLine.length - 2],mainLine[mainLine.length - 1]];
-    console.log("@@ " + lastLineStored);
-    //if angle between last line stored and current line is less than 180 deg, remove
-    //1. test top
-    if (angle > 180) {
+      let tempData = leftLineGeom[leftLineGeom.length - 1];
+      //let lastStoredLeftLineSegment = [tempData[0], tempData[1]];
+      let lastStoredLeftLineSegment = [leftLineGeom[leftLineGeom.length - 2], leftLineGeom[leftLineGeom.length - 1]];
+      console.log("lastStoredLeftLineSegment:", lastStoredLeftLineSegment);
+      console.log("---");
+      console.log("LEFT line: ", leftLineGeom);
+      console.log("RIGHT line: ", rightLineGeom);
+      console.log("---");
       
-      console.log("Angle greater than 180...");
+      if (angle !== 180.0) {
+        /* ----------------- USE LEFT LINE AS PERSPECTIVE ---------------- */
+        //if the parallel buffer lines of previous and current line intersect on the left side 
+        //let intersection = linesIntersect(lastStoredLeftLineSegment, leftBGBSegment);
+        let intersection = bufferUtils.linesIntersect(lastStoredLeftLineSegment, leftBGBSegment);
+        if (intersection !== null) {   //intersection occured
+          //LEFT LINE: remove last node stored and insert intersection point then insert last node of BGB segment
+          console.log("Intersection occurred at: ", intersection);
+          leftLineGeom.pop();
+          leftLineGeom.push(intersection); 
+          leftLineGeom.push(leftBGBSegment[1]); 
+
+          //RIGHT LINE: Maintain last node stored and insert start then end nodes of the right BGB segment
+          rightLineGeom.push(rightBGBSegment[0]);
+          rightLineGeom.push(rightBGBSegment[1]);
+        }
+        if (intersection === null) {
+          console.log("NO Intersection occurred");
+        }
+      }
+    /*
+    if (angle > 180) {
+      console.log("Angle greater than 180 ..."); 
+      // ----------------- LEFT LINE ---------------- 
       //1. Maintain last node stored
       //2. Add start and end nodes of the current line to the main buffer line  for now
-      mainLine.push(lineSegment[0]);
-      mainLine.push(lineSegment[1]);
+      leftLineGeom.push(leftBGBSegment[0]);
+      leftLineGeom.push(leftBGBSegment[1]);
       //3. Later::: Calculate the angle between last node stored and the first node of the current line, then construct an arc between them
-
-    } else if (angle < 180) {
+      // ----------------- RIGHT LINE ---------------- 
+      let intersection = linesIntersect(prevRightLine, rightBGBSegment);
+      if ( intersection[0]) {  //if lines intersect
+        console.log("line instersect: remove old point and insert only intersection point and right node");
+        leftLineGeom.pop();
+        leftLineGeom.push(intersection[1]);
+        leftLineGeom.push(leftBGBSegment[1]);
+      }
+    }  else if (angle < 180) {
       console.log("Angle less 180");
-      console.log("Last line stored: " + lastLineStored);
-      console.log("Curr line segmen: " + lineSegment);
+      console.log("Last line stored: " + prevLeftLine);
+      console.log("Curr line segmen: " + leftBGBSegment);
       //1. check if the previous line stored and the current line intersect.
       //if yes, they intersect, calculate the intersection point, remove last node stored and insert the intersection point and insert the last node
       // of the current line
-      let intersection = linesIntersect(lastLineStored, lineSegment);
+      let intersection = linesIntersect(prevLeftLine, leftBGBSegment);
       if ( intersection[0]) {  //if lines intersect
         console.log("line instersect: remove old point and insert only intersection point and right node");
-        mainLine.pop();
-        mainLine.push(intersection[1]);
-        mainLine.push(lineSegment[1]);
-      }
+        leftLineGeom.pop();
+        leftLineGeom.push(intersection[1]);
+        leftLineGeom.push(leftBGBSegment[1]);
+      } 
 
       //2. if they dont intersect, check if the length of the current line longer the previous line
       //if current is longer, check for the intersection of the line border line and the previous line stored
-
     }
-    /* lastLineStored = [mainLine[mainLine.length - 2], mainLine[mainLine.length - 1]];
-    console.log("last Line stored: " + lastLineStored);
-    let intersection = linesIntersect(lastLineStored, lineSegment);
-    if ( intersection[0]) {  //if lines intersect
-      console.log("line instersect: remove old point and insert only intersection point and right node");
-      mainLine.pop();
-      mainLine.push(intersection[1]);
-      mainLine.push(lineSegment[1]);
-    }else{
-      console.log("do not intersect: insert both first and last node of new line. no remove")
-      mainLine.push(lineSegment[0]);
-      mainLine.push(lineSegment[1]);
-    } */
+    */
   }
-  console.log("Topline: " + mainLine);
-  console.log("---");
-  return mainLine;
+/*   console.log("---");
+  console.log("LEFT line: ", leftLineGeom);
+  console.log("RIGHT line: ", rightLineGeom);
+  console.log("---"); */
+  console.log("---------------------------------------------------------------------------");
+  return leftLineGeom;
 }
 
-function getAngleBetweenlines(line1, line2){
+function getAngleBetweenlines(prev, curr){
   //format of line [0:[x, y], 1:[x, y]]
-  let line1Dx = line1[0][0] - line1[1][0];
-  let line1Dy = line1[0][1] - line1[1][1];
-  let line2Dx = line2[1][0] - line2[0][0];
-  let line2Dy = line2[1][1] - line2[0][1];
+  let prevDx = prev[0][0] - prev[1][0];
+  let prevDy = prev[0][1] - prev[1][1];
+  let currDx = curr[1][0] - curr[0][0];
+  let currDy = curr[1][1] - curr[0][1];
 
-  let angle1 = Math.atan2(line1Dy, line1Dx);
-  let angle2 = Math.atan2(line2Dy, line2Dx);
+  let anglePrev = Math.atan2(prevDy, prevDx);
+  let angleCurr = Math.atan2(currDy, currDx);
   //console.log("Previous Line: " + line1);
   //console.log("Current Line : " + line2);
   //console.log("line1Dx: " + line1Dx + " | line1Dy: " + line1Dy + " | Angle1: " + (angle1 * RAD2DEG)) ;
   //console.log("line2Dx: " + line2Dx + " | line2Dy: " + line2Dy + " | ANgle2: " + (angle2 * RAD2DEG)) ;
-  let angle = Math.abs(angle1 - angle2) * RAD2DEG;
+  let angle = Math.abs(anglePrev - angleCurr) * RAD2DEG;
   //console.log("Angle between lines: " + angle);
   return angle;
 }
@@ -378,6 +555,30 @@ function getSemiCircleVertices(originPoint, radius, side) {
   return arc;
 }
 
+/**
+ * Rotate the Right node about the left node either clockwise or counter clockwise based on the given angle to form a horizontal line. 
+ * Line must have exactly two points.
+ * @param LNode (array [Number, Number]): Left node of line (node closer to origin on the X axis)
+ * @param RNode (array [Number, Number]: Right node of line (node farther from origin on the X axis)
+ * @param angle {NUmber}: Angle of rotation in radians
+ * @returns {Number Array}: the coordinate [X, Y] of the right node after it has been rotated.
+ */
+function rotateRNodeAroundLNode(LNode, RNode, angle){
+  let LX = LNode[0];            //LX is for easting value or x value of the left node
+  let LY = LNode[1];             //LY us for northing value or y value of the left node
+  let RX = RNode[0];            //RX is for easting value or x value of the right node
+  let RY = RNode[1];            //RN us for northing value or y value of the right node
+  let cosa = Math.cos(angle);
+  let sina = Math.sin(angle);
+  let rx = RX - LX;
+  let ry = RY - LY;
+  let RX_Rotated = (rx * cosa - ry * sina) + LX;
+  let RY_rotated = (ry * cosa + rx * sina) + LY;
+
+  return [RX_Rotated, RY_rotated];
+}
+
+
 /** 
  * Get angle for which line should be rotated in order to form a purely horizontal line
  * Note: node with X value closer to origin is considered left node during computation
@@ -417,54 +618,8 @@ function filterNextNode(geom){
   return geom;
 }
  
-/** 
- * Check if the two lines intersect
- * @param line1 {[Number, Number], [Number, Number]}: Left Node [Easting, Northing] coordinates 
- * @param line2 {[Number, Number], [Number, Number]}: Right Node [Easting, Northing] coordinates 
- * @returns {Boolean, [X, Y]}: True and the intersection point if the lines intersect, 
- *  else return false and undefined.
- */
-function linesIntersect(prev, curr){
-  console.log("prev: " + prev);
-  let status = false;
-  let x1 = curr[0][0], y1 = curr[0][1], x2 = curr[1][0], y2 = curr[1][1];
-  //let x3 = prev[0][0], y3 = prev[0][1], x4 = prev[1][0], y4 = prev[1][1];
-  let x3 = prev[0][0], y3 = prev[0][1], x4 = prev[0][2], y4 = prev[0][3];
-  console.log("y4: " + y4);
-  let t = ( (x1-x3)*(y3-y4) - (y1-y3)*(x3-x4) ) /
-          ( (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4) ) ;
-  console.log("t: " + t);
-  if (t >= 0.0 && t <= 1.0) {
-    status = true;
-    console.log("t: " + t);
-  }
-  let X = 0.23333333333, Y = 0.2444444444;
-  console.log(" status: " + status);
-  return [status, [X,Y]];
-}
 
-/**
- * Rotate the Right node about the left node either clockwise or counter clockwise based on the given angle to form a horizontal line. 
- * Line must have exactly two points.
- * @param LNode (array [Number, Number]): Left node of line (node closer to origin on the X axis)
- * @param RNode (array [Number, Number]: Right node of line (node farther from origin on the X axis)
- * @param angle {NUmber}: Angle of rotation in radians
- * @returns {Number Array}: the coordinate [X, Y] of the right node after it has been rotated.
- */
-function rotateRNodeAroundLNode(LNode, RNode, angle){
-  let LX = LNode[0];            //LX is for easting value or x value of the left node
-  let LY= LNode[1];             //LY us for northing value or y value of the left node
-  let RX = RNode[0];            //RX is for easting value or x value of the right node
-  let RY = RNode[1];            //RN us for northing value or y value of the right node
-  let cosa = Math.cos(angle);
-  let sina = Math.sin(angle);
-  let rx = RX - LX;
-  let ry = RY - LY;
-  let RX_Rotated = (rx * cosa - ry * sina) + LX;
-  let RY_rotated = (ry * cosa + rx * sina) + LY;
 
-  return [RX_Rotated, RY_rotated];
-}
 
 /**
  * Compare two arrays to check if they have the same content in the same order. 
@@ -503,11 +658,11 @@ function isVertOrHorz(startCoordinate, endCoordinate){
   //console.log("startN: " + startN + " | endN: " + endN);
   if (startN === endN) {     /* if line is purely horizontal */
     status = 1;
-  }else  
-  if (startE === endE) {     /* if line is purely vertical */
+  }else if (startE === endE) {     /* if line is purely vertical */
     status = 2;
   } else {
     status = 0;
+    direction = (endE > startE) ? 1 : -1 ;
   }
   return status;
 }
